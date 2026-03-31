@@ -61,9 +61,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);fon
 .metric .lbl{font-size:10px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px}
 
 /* Table */
-.tbl-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+.tbl-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;max-height:75vh;overflow-y:auto}
 table{width:100%;border-collapse:collapse;font-size:13px}
-thead th{background:#f0ede6;padding:7px 9px;text-align:center;font-family:'DM Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;font-weight:500}
+thead th{background:#f0ede6;padding:7px 9px;text-align:center;font-family:'DM Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;font-weight:500;position:sticky;top:0;z-index:10}
 thead th.left{text-align:left}
 /* Colored header columns */
 .th-lost{background:#fecdd3;color:#881337 !important}
@@ -108,6 +108,7 @@ tbody tr[class*="row-"]:hover td{filter:brightness(.97)}
 .prov-a td{background:rgba(0,0,0,.0)}
 .prov-b td{background:rgba(0,0,0,.025)}
 tbody tr[class*="prov-"]:hover td{filter:brightness(.97)}
+tr.prov-first td{border-top:2px solid #b0aca0 !important}
 
 /* Chart section */
 .chart-section{}
@@ -119,6 +120,28 @@ tbody tr[class*="prov-"]:hover td{filter:brightness(.97)}
 .chart-legend span{display:flex;align-items:center;gap:4px}
 .leg-sq{width:10px;height:10px;border-radius:2px;flex-shrink:0}
 .chart-wrap{position:relative}
+
+/* Upload */
+.upload-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.5rem;max-width:680px}
+.upload-card h2{font-size:15px;font-weight:600;margin-bottom:.5rem}
+.upload-card p{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:1.25rem}
+.drop-zone{border:2px dashed var(--border);border-radius:var(--radius-lg);padding:2.5rem 2rem;text-align:center;cursor:pointer;transition:all .2s;background:var(--bg);position:relative;margin-bottom:1rem}
+.drop-zone:hover,.drop-zone.drag-over{border-color:var(--accent);background:#eff6ff}
+.drop-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.drop-icon{font-size:28px;color:var(--muted);margin-bottom:.5rem}
+.drop-label{font-size:14px;font-weight:500;color:var(--text)}
+.drop-sub{font-size:12px;color:var(--muted);margin-top:4px}
+.upload-status{font-size:13px;font-family:'DM Mono',monospace;padding:.5rem 0;min-height:24px}
+.upload-status.ok{color:var(--green)}
+.upload-status.err{color:var(--red)}
+.upload-info{background:var(--surface2);border-radius:var(--radius);padding:1rem 1.25rem;font-size:12px;color:var(--muted);line-height:1.8;margin-top:.75rem}
+.upload-info-title{font-weight:600;color:var(--text);margin-bottom:.4rem;font-size:12px;text-transform:uppercase;letter-spacing:.06em;font-family:'DM Mono',monospace}
+.upload-info ul{padding-left:1.25rem}
+.upload-info code{font-family:'DM Mono',monospace;background:var(--border);padding:1px 5px;border-radius:3px}
+.upload-btn{font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;padding:7px 18px;border:none;border-radius:var(--radius);background:var(--accent);color:#fff;cursor:pointer}
+.upload-btn:hover{background:#1a44c2}
+.clear-btn{font-family:'DM Sans',sans-serif;font-size:13px;padding:7px 18px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--muted);cursor:pointer}
+.clear-btn:hover{background:var(--surface2)}
 </style>
 </head>
 <body>
@@ -152,6 +175,7 @@ tbody tr[class*="prov-"]:hover td{filter:brightness(.97)}
   <div class="tabs">
     <button class="tab active" data-view="table">Summary table</button>
     <button class="tab" data-view="charts">Provider charts</button>
+    <button class="tab" data-view="upload">Update data</button>
   </div>
 
   <!-- National avg -->
@@ -188,6 +212,40 @@ tbody tr[class*="prov-"]:hover td{filter:brightness(.97)}
   <!-- CHARTS -->
   <div id="view-charts" style="display:none">
     <div class="chart-grid" id="chart-grid"></div>
+  </div>
+
+  <!-- UPLOAD -->
+  <div id="view-upload" style="display:none">
+    <div class="upload-card">
+      <h2>Update current-year data</h2>
+      <p>Drop your CSV files below. The dashboard will detect the year from each file's dates and <strong>replace all data for that year</strong> while leaving all other years untouched. Upload all 8 measure files at once for a complete update.</p>
+
+      <div class="drop-zone" id="drop-zone">
+        <input type="file" id="csv-input" accept=".csv" multiple>
+        <div class="drop-icon">↓</div>
+        <div class="drop-label">Drag &amp; drop CSV files here</div>
+        <div class="drop-sub">or click to browse</div>
+      </div>
+
+      <div class="upload-status" id="upload-status"></div>
+
+      <div class="upload-info">
+        <div class="upload-info-title">How it works</div>
+        <ul>
+          <li>Drop all 8 measure CSVs at once (Back Function, Back Pain, Neck Pain, etc.)</li>
+          <li>The year is read from the <code>Date of Initial eval</code> column in each file</li>
+          <li>All existing data for that year is replaced — previous years are never touched</li>
+          <li>2025 data is embedded permanently. If 2026 files contain patients who <em>started</em> in 2025 (carry-overs), their 2025 record is updated with the completed outcome — no double-counting</li>
+          <li>New data is saved in your browser — it persists between sessions on this device</li>
+        </ul>
+      </div>
+
+      <div style="margin-top:1rem;display:flex;gap:10px;align-items:center">
+        <button class="upload-btn" id="process-btn" style="display:none">Process files</button>
+        <button class="clear-btn" id="clear-btn">Clear uploaded years</button>
+        <span id="stored-years" style="font-size:12px;font-family:'DM Mono',monospace;color:var(--muted)"></span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -476,7 +534,8 @@ function renderTable(data){
       const coDisplay=coAvg!==null?coAvg+'%':'—';
       const natDisplay=natAvg+'%';
 
-      html+=`<tr class="${MEASURE_ROW_CLASS[m]} ${provRowClass}">`;
+      const firstRowClass=mi===0?'prov-first':'';
+      html+=`<tr class="${MEASURE_ROW_CLASS[m]} ${provRowClass} ${firstRowClass}">`;
       if(mi===0){
         html+=`<td class="left provider-name" rowspan="${rowCount}" style="vertical-align:middle">${provName}</td>`;
       }
@@ -564,8 +623,11 @@ function renderCharts(data){
         datasets:[{
           data:provVals,
           backgroundColor:barColors,
+          borderColor:'rgba(255,255,255,0.9)',
+          borderWidth:2,
           borderRadius:3,
-          barPercentage:0.65
+          barPercentage:0.55,
+          categoryPercentage:0.85
         }]
       },
       options:{
@@ -643,15 +705,303 @@ document.querySelectorAll('.tab').forEach(tab=>{
   tab.addEventListener('click',()=>{
     document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
     tab.classList.add('active');
-    render();
+    document.getElementById('view-table').style.display='none';
+    document.getElementById('view-charts').style.display='none';
+    document.getElementById('view-upload').style.display='none';
+    const v=tab.dataset.view;
+    document.getElementById('view-'+v).style.display='block';
+    if(v!=='upload') render();
   });
 });
 
 
 
+
+// ============================================================
+// UPLOAD / DATA MANAGEMENT
+// ============================================================
+
+// MEASURE DETECTION from filename
+const MEASURE_FROM_FILENAME = {
+  'neck_pain_function':'Neck Pain Function','neck_pain':'Neck Pain',
+  'back_function':'Back Function','back_pain':'Back Pain',
+  'ue_function':'UE Function','ue_pain':'UE Pain',
+  'le_function':'LE Function','le_pain':'LE Pain',
+  'msk1':'Neck Pain Function','msk2':'UE Function','msk3':'Back Function',
+  'msk4':'LE Function','msk6':'Neck Pain','msk7':'UE Pain',
+  'msk8':'Back Pain','msk9':'LE Pain'
+};
+
+function detectMeasure(filename){
+  const low = filename.toLowerCase().replace(/[^a-z0-9]/g,'_');
+  // Try longer keys first to avoid partial matches
+  const keys = Object.keys(MEASURE_FROM_FILENAME).sort((a,b)=>b.length-a.length);
+  for(const key of keys){
+    if(low.includes(key)) return MEASURE_FROM_FILENAME[key];
+  }
+  return null;
+}
+
+function parseCSV(text){
+  const lines = text.split('\n').filter(l=>l.trim());
+  if(!lines.length) return [];
+  // Handle quoted fields
+  function parseLine(line){
+    const result=[]; let cur=''; let inQ=false;
+    for(let i=0;i<line.length;i++){
+      if(line[i]==='"'){ inQ=!inQ; }
+      else if(line[i]===','&&!inQ){ result.push(cur.trim()); cur=''; }
+      else cur+=line[i];
+    }
+    result.push(cur.trim());
+    return result;
+  }
+  const headers = parseLine(lines[0]);
+  return lines.slice(1).map(line=>{
+    const vals = parseLine(line);
+    const obj={};
+    headers.forEach((h,i)=>obj[h.trim()]=(vals[i]||'').trim());
+    return obj;
+  });
+}
+
+// LocalStorage key for extra years
+const LS_KEY = 'pt_dashboard_extra';
+
+function loadExtraData(){
+  try{ const s=localStorage.getItem(LS_KEY); return s?JSON.parse(s):[]; }
+  catch(e){ return []; }
+}
+function saveExtraData(data){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch(e){ alert('Storage full — try clearing old data first.'); }
+}
+function getStoredYears(){
+  const d=loadExtraData();
+  return [...new Set(d.map(r=>r.year))].sort();
+}
+
+// Merge extra data with embedded 2025 data.
+// Carryover rows (2025 intake, updated outcome from newer export) override the 
+// embedded 2025 row for that same provider/quarter/measure combination.
+function getAllData(){
+  const extra = loadExtraData();
+  const carryover = extra.filter(r=>r._isCarryover && r.year===2025);
+  const nonCarryover = extra.filter(r=>!r._isCarryover);
+
+  if(!carryover.length) return [...RAW_DATA, ...nonCarryover];
+
+  // Build a set of keys that carryover rows replace
+  const carryoverKeys = new Set(carryover.map(r=>r.provider+'|||'+r.year+'|||'+r.quarter+'|||'+r.measure));
+  // Filter embedded 2025 data, removing rows superseded by carryover
+  const base2025 = RAW_DATA.filter(r=>!(r.year===2025 && carryoverKeys.has(r.provider+'|||'+r.year+'|||'+r.quarter+'|||'+r.measure)));
+  return [...base2025, ...carryover, ...nonCarryover];
+}
+
+function updateStoredYearsLabel(){
+  const years=getStoredYears();
+  const el=document.getElementById('stored-years');
+  if(el) el.textContent = years.length ? 'Stored years: '+years.join(', ') : 'No additional years stored';
+}
+
+// Override filteredData to use all data including stored
+function filteredData(){
+  const year     = document.getElementById('f-year').value;
+  const quarter  = document.getElementById('f-quarter').value;
+  const region   = document.getElementById('f-region').value;
+  const clinic   = document.getElementById('f-clinic').value;
+  const provider = document.getElementById('f-provider').value;
+  const outcome  = document.getElementById('f-outcome').value;
+  const allowedMeasures = getMeasuresForOutcome(outcome);
+  return getAllData().filter(r => {
+    if(year!=='all' && r.year!=year) return false;
+    if(quarter!=='all' && r.quarter!=quarter) return false;
+    if(region!=='all' && getRegion(r.provider)!==region) return false;
+    if(clinic!=='all' && getClinicShort(r.provider)!==clinic) return false;
+    if(provider!=='all' && r.provider!==provider) return false;
+    if(!allowedMeasures.includes(r.measure)) return false;
+    return true;
+  });
+}
+
+// Refresh year dropdown to include stored years
+function refreshYearDropdown(){
+  const ysel=document.getElementById('f-year');
+  const prev=ysel.value;
+  while(ysel.options.length>1) ysel.remove(1);
+  const allYears=[...new Set(getAllData().map(r=>r.year))].sort();
+  allYears.forEach(y=>{ const o=document.createElement('option'); o.value=y; o.textContent=y; ysel.appendChild(o); });
+  if([...ysel.options].some(o=>o.value==prev)) ysel.value=prev;
+}
+
+let pendingFiles=[];
+
+function initUpload(){
+  const dropZone=document.getElementById('drop-zone');
+  const input=document.getElementById('csv-input');
+  const statusEl=document.getElementById('upload-status');
+  const processBtn=document.getElementById('process-btn');
+  const clearBtn=document.getElementById('clear-btn');
+
+  // Drag events
+  dropZone.addEventListener('dragover',e=>{ e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop',e=>{
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    pendingFiles=[...e.dataTransfer.files].filter(f=>f.name.toLowerCase().endsWith('.csv'));
+    if(pendingFiles.length){
+      statusEl.className='upload-status';
+      statusEl.textContent=pendingFiles.length+' file(s) ready: '+pendingFiles.map(f=>f.name).join(', ');
+      processBtn.style.display='inline-block';
+    }
+  });
+
+  // Click to browse
+  input.addEventListener('change',e=>{
+    pendingFiles=[...e.target.files];
+    if(pendingFiles.length){
+      statusEl.className='upload-status';
+      statusEl.textContent=pendingFiles.length+' file(s) selected: '+pendingFiles.map(f=>f.name).join(', ');
+      processBtn.style.display='inline-block';
+    }
+  });
+
+  // Process
+  processBtn.addEventListener('click',async()=>{
+    if(!pendingFiles.length) return;
+    statusEl.className='upload-status';
+    statusEl.textContent='Processing…';
+    processBtn.style.display='none';
+
+    const newRows=[];
+    const errors=[];
+
+    // Track patient IDs updated across files so we can patch 2025 embedded data
+    // Key insight: a patient who started in 2025 but finished in 2026 will appear in 
+    // the 2026 export with their 2025 intake date. We need to update their 2025 record.
+    const updatedPatientKeys = new Set(); // patientId+measure keys updated from new files
+    const carryoverRows = []; // rows with 2025 intake found in newer exports
+    const newYearRows = []; // rows with intake year matching the export year
+
+    for(const file of pendingFiles){
+      const measure=detectMeasure(file.name);
+      if(!measure){ errors.push('Could not detect measure from: '+file.name); continue; }
+      const text=await file.text();
+      const rows=parseCSV(text);
+
+      // Detect what year this file represents (most common intake year)
+      const yearsInFile = {};
+      rows.forEach(r=>{
+        const ds=r['Date of Initial eval']||'';
+        const d=new Date(ds);
+        if(!isNaN(d.getTime())){ const y=d.getFullYear(); yearsInFile[y]=(yearsInFile[y]||0)+1; }
+      });
+      const fileYear = Object.entries(yearsInFile).sort((a,b)=>b[1]-a[1])[0]?.[0];
+
+      rows.forEach(r=>{
+        const dateStr=r['Date of Initial eval']||'';
+        const survey=parseInt(r['Survey Count']||'0');
+        const perf=r['Performance']||'';
+        const prov=r['Provider Name']||'';
+        const patId=r['Patient ID']||'';
+        if(!prov||!dateStr) return;
+        const d=new Date(dateStr);
+        if(isNaN(d.getTime())) return;
+        const intakeYear=d.getFullYear();
+        const quarter=Math.ceil((d.getMonth()+1)/3);
+
+        const row = {
+          provider:prov, year:intakeYear, quarter, measure,
+          two_plus: survey>=2?1:0,
+          met: perf==='Met'?1:0,
+          not_met: perf==='Not Met'?1:0,
+          total: 1,
+          _patKey: patId+'|||'+measure  // for dedup tracking
+        };
+
+        if(intakeYear===2025){
+          // Carry-over patient: started 2025, appearing in newer export with updated outcome
+          // Only include if they now have 2+ surveys (i.e. they have a real outcome now)
+          if(survey>=2){
+            carryoverRows.push(row);
+            updatedPatientKeys.add(row._patKey);
+          }
+        } else {
+          newYearRows.push(row);
+        }
+      });
+    }
+
+    const allNewRows = [...carryoverRows, ...newYearRows];
+
+    if(!allNewRows.length && !errors.length){
+      statusEl.className='upload-status err';
+      statusEl.textContent='No valid rows found.';
+      return;
+    }
+
+    // Aggregate by provider/year/quarter/measure
+    const aggMap={};
+    allNewRows.forEach(r=>{
+      const key=r.provider+'|||'+r.year+'|||'+r.quarter+'|||'+r.measure;
+      if(!aggMap[key]) aggMap[key]={provider:r.provider,year:r.year,quarter:r.quarter,measure:r.measure,two_plus:0,met:0,not_met:0,total:0};
+      const a=aggMap[key];
+      a.two_plus+=r.two_plus; a.met+=r.met; a.not_met+=r.not_met; a.total+=r.total;
+    });
+    const newAgg=Object.values(aggMap);
+
+    // Determine which non-2025 years are fully replaced
+    const newYears=[...new Set(newYearRows.map(r=>r.year))];
+
+    // For carryover rows (2025 intake): store them separately as overrides
+    // They will be merged in getAllData() to update the embedded 2025 record
+    const carryoverAgg = newAgg.filter(r=>r.year===2025);
+    const nonCarryoverAgg = newAgg.filter(r=>r.year!==2025);
+
+    // Load existing extra data
+    let existing = loadExtraData();
+    // Remove years being fully replaced
+    existing = existing.filter(r=>!newYears.includes(r.year));
+    // Remove old carryover overrides for measures we're now updating
+    existing = existing.filter(r=>!(r.year===2025 && r._isCarryover));
+    // Mark carryover rows
+    carryoverAgg.forEach(r=>r._isCarryover=true);
+
+    const merged=[...existing, ...nonCarryoverAgg, ...carryoverAgg];
+    saveExtraData(merged);
+
+    const allYearsUpdated = [...newYears, ...(carryoverAgg.length?['2025 (carry-over updates)']:[])];
+
+    refreshYearDropdown();
+    updateStoredYearsLabel();
+    render();
+
+    const msg=`Loaded ${allNewRows.length} rows. Updated: ${allYearsUpdated.join(', ')}.`+(errors.length?' Errors: '+errors.join('; '):'');
+    statusEl.className='upload-status ok';
+    statusEl.textContent=msg;
+    pendingFiles=[];
+    input.value='';
+  });
+
+  // Clear stored years
+  clearBtn.addEventListener('click',()=>{
+    if(!confirm('This will remove all uploaded years (not 2025). Continue?')) return;
+    localStorage.removeItem(LS_KEY);
+    refreshYearDropdown();
+    updateStoredYearsLabel();
+    render();
+    document.getElementById('upload-status').className='upload-status';
+    document.getElementById('upload-status').textContent='Uploaded data cleared.';
+  });
+
+  updateStoredYearsLabel();
+}
+
 // Boot
 initNationalInputs();
 initFilters();
+refreshYearDropdown();
+initUpload();
 render();
 </script>
 </body>
