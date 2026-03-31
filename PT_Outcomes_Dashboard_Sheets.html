@@ -202,7 +202,7 @@ tbody tr[class*="row-"]:hover td{filter:brightness(.97)}
 // ============================================================
 // CONFIG
 // ============================================================
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzZzuGGaBc9ZuIg5uu-UBXyOfuMXBnDQIi-B111qlWyzb7myiiXJCNuWjqHL4FRzohU/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwbCJPq8F20VVsmd7CFy0nPUY4D7dfGutLtrcARqfzwuTm1PK8zLMjK-n83RdzKsFh1Pw/exec';
 const MEASURES = ['Neck Pain Function','Neck Pain','Back Function','Back Pain','UE Function','UE Pain','LE Function','LE Pain'];
 const SHEET_TAB_NAMES = {
   'Neck Pain Function': 'Neck Pain Function',
@@ -319,13 +319,37 @@ function sheetTabName(year, measure) {
   return `${year}_${SHEET_TAB_NAMES[measure]}`;
 }
 
-async function fetchSheetRows(tabName) {
-  const url = APPS_SCRIPT_URL + '?sheet=' + encodeURIComponent(tabName);
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error('HTTP ' + resp.status);
-  const json = await resp.json();
-  if (json.error) throw new Error(json.error);
-  return Array.isArray(json) ? json : [];
+function fetchSheetRows(tabName) {
+  return new Promise((resolve, reject) => {
+    const callbackName = 'jsonp_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+    const script = document.createElement('script');
+    const url = APPS_SCRIPT_URL + '?sheet=' + encodeURIComponent(tabName) + '&callback=' + callbackName;
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('Timeout fetching: ' + tabName));
+    }, 30000);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      delete window[callbackName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    window[callbackName] = function(json) {
+      cleanup();
+      if (json && json.error) { reject(new Error(json.error)); return; }
+      resolve(Array.isArray(json) ? json : []);
+    };
+
+    script.onerror = function() {
+      cleanup();
+      reject(new Error('JSONP script error for: ' + tabName));
+    };
+
+    script.src = url;
+    document.head.appendChild(script);
+  });
 }
 
 function parseCSVText(text) {
