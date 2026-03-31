@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PT Outcomes Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root{
+  --bg:#f5f4f1;--surface:#fff;--surface2:#eeecea;--border:#dddad2;
+  --text:#1c1b18;--muted:#74726b;--accent:#1d4ed8;
+  --above-bg:#d1fae5;--above-text:#065f46;
+  --below-bg:#fee2e2;--below-text:#991b1b;
+  --radius:6px;--radius-lg:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.4}
+
+/* Header */
+.header{background:#1e293b;color:#fff;padding:.9rem 2rem;display:flex;align-items:center;gap:12px}
+.header-icon{width:30px;height:30px;background:rgba(255,255,255,.15);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px}
+.header-text h1{font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;letter-spacing:.01em}
+.header-text p{font-size:11px;color:rgba(255,255,255,.5);font-family:'DM Mono',monospace;margin-top:2px}
+.header-status{margin-left:auto;font-size:11px;font-family:'DM Mono',monospace;display:flex;align-items:center;gap:8px}
+.status-dot{width:8px;height:8px;border-radius:50%;background:#94a3b8;flex-shrink:0;transition:background .3s}
+.status-dot.loading{background:#f59e0b;animation:pulse 1s infinite}
+.status-dot.ok{background:#22c55e}
+.status-dot.err{background:#ef4444}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+.main{max-width:1650px;margin:0 auto;padding:1.25rem 1.5rem}
+
+/* Loading overlay */
+.loading-overlay{position:fixed;inset:0;background:rgba(255,255,255,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;gap:16px}
+.loading-overlay.hidden{display:none}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-family:'DM Mono',monospace;font-size:13px;color:var(--muted)}
+.loading-bar-wrap{width:240px;height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.loading-bar{height:100%;background:var(--accent);border-radius:2px;transition:width .3s;width:0%}
+
+/* Filter bar */
+.filter-bar{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.75rem 1.25rem;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:1rem}
+.fg{display:flex;flex-direction:column;gap:3px}
+.fg label{font-size:11px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:500}
+.fg select{font-family:'DM Sans',sans-serif;font-size:13px;padding:5px 26px 5px 9px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2374726b'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;cursor:pointer;min-width:145px}
+.fg select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(29,78,216,.12)}
+.refresh-btn{font-family:'DM Sans',sans-serif;font-size:12px;padding:5px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--muted);cursor:pointer;white-space:nowrap;transition:all .15s;align-self:flex-end}
+.refresh-btn:hover{background:var(--surface2);color:var(--text)}
+
+/* Tabs */
+.tabs{display:flex;gap:2px;margin-bottom:1rem;border-bottom:1px solid var(--border);padding-bottom:0}
+.tab{padding:7px 16px;font-size:13px;font-family:'DM Sans',sans-serif;font-weight:500;border:none;border-bottom:2px solid transparent;cursor:pointer;background:transparent;color:var(--muted);transition:all .15s;margin-bottom:-1px}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* National avg panel */
+.nat-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.75rem 1.25rem;margin-bottom:1rem}
+.nat-panel-head{font-size:11px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:.6rem;font-weight:500}
+.nat-grid{display:flex;flex-wrap:wrap;gap:14px}
+.nat-item label{display:block;font-size:11px;color:var(--muted);margin-bottom:3px}
+.nat-item input{width:68px;font-family:'DM Sans',sans-serif;font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);text-align:center}
+.nat-item input:focus{outline:none;border-color:var(--accent)}
+
+/* Metrics */
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:1rem}
+.metric{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:.8rem 1rem}
+.metric .val{font-size:21px;font-weight:500}
+.metric .lbl{font-size:10px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px}
+
+/* Table */
+.tbl-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;max-height:75vh;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{background:#f0ede6;padding:7px 9px;text-align:center;font-family:'DM Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;font-weight:500;position:sticky;top:0;z-index:10}
+thead th.left{text-align:left}
+.th-lost{background:#fecdd3;color:#881337!important}
+.th-prov{background:#bfdbfe;color:#1e3a8a!important}
+.th-co{background:#fed7aa;color:#7c2d12!important}
+.th-nat{background:#bbf7d0;color:#14532d!important}
+tbody td{padding:6px 9px;text-align:center;border-bottom:1px solid #f2f0eb;font-size:13px}
+tbody td.left{text-align:left}
+tbody tr:last-child td{border-bottom:none}
+.provider-name{font-weight:600;font-size:13px}
+.measure-name{font-size:12px;color:var(--muted)}
+.mono{font-family:'DM Mono',monospace;font-size:12px}
+.badge{display:inline-block;font-size:11px;font-family:'DM Mono',monospace;padding:2px 8px;border-radius:4px;font-weight:500}
+.badge.above{background:var(--above-bg);color:var(--above-text)}
+.badge.below{background:var(--below-bg);color:var(--below-text)}
+.badge.na{background:var(--surface2);color:var(--muted)}
+.group-sep td{font-size:11px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.08em;padding:5px 10px;font-weight:600;color:#fff}
+.group-sep.region-Blue td{background:#1d4ed8}
+.group-sep.region-Green td{background:#15803d}
+.group-sep.region-Red td{background:#b91c1c}
+.group-sep.region-Orange td{background:#c2410c}
+.group-sep.region-Purple td{background:#7c3aed}
+.prov-a td{background:rgba(0,0,0,0)}
+.prov-b td{background:rgba(0,0,0,.025)}
+tbody tr[class*="prov-"]:hover td{filter:brightness(.97)}
+tr.prov-first td{border-top:2px solid #b0aca0!important}
+.row-neck-fn td{background:#f0f4ff}
+.row-neck-pain td{background:#e6edff}
+.row-back-fn td{background:#fdf9f0}
+.row-back-pain td{background:#faf4e6}
+.row-ue-fn td{background:#f0fdf4}
+.row-ue-pain td{background:#e6f9ed}
+.row-le-fn td{background:#fdf4f0}
+.row-le-pain td{background:#f9ede6}
+tbody tr[class*="row-"]:hover td{filter:brightness(.97)}
+
+/* Charts */
+.chart-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(460px,1fr));gap:1.25rem}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.25rem}
+.chart-card h3{font-size:13px;font-weight:600;margin-bottom:2px}
+.chart-sub{font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);margin-bottom:8px}
+.chart-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);margin-bottom:8px}
+.chart-legend span{display:flex;align-items:center;gap:4px}
+.leg-sq{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.chart-wrap{position:relative}
+
+/* No data */
+.no-data{padding:3rem;text-align:center;color:var(--muted);font-size:13px;font-family:'DM Mono',monospace}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loading-overlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loading-text">Loading data from Google Sheets…</div>
+  <div class="loading-bar-wrap"><div class="loading-bar" id="loading-bar"></div></div>
+</div>
+
+<div class="header">
+  <div class="header-icon">+</div>
+  <div class="header-text">
+    <h1>Physical Therapy Outcomes Dashboard</h1>
+    <p>MCID PERFORMANCE &amp; PROVIDER BENCHMARKING</p>
+  </div>
+  <div class="header-status">
+    <div class="status-dot loading" id="status-dot"></div>
+    <span id="status-text">Loading…</span>
+  </div>
+</div>
+
+<div class="main">
+  <div class="filter-bar">
+    <div class="fg"><label>Year</label><select id="f-year"><option value="all">All years</option></select></div>
+    <div class="fg"><label>Quarter</label><select id="f-quarter"><option value="all">All quarters</option><option value="1">Q1</option><option value="2">Q2</option><option value="3">Q3</option><option value="4">Q4</option></select></div>
+    <div class="fg"><label>Region</label><select id="f-region"><option value="all">All regions</option></select></div>
+    <div class="fg"><label>Clinic</label><select id="f-clinic"><option value="all">All clinics</option></select></div>
+    <div class="fg"><label>Therapist</label><select id="f-provider"><option value="all">All therapists</option></select></div>
+    <div class="fg"><label>Outcome</label><select id="f-outcome">
+      <option value="all">All outcomes</option>
+      <option value="NDI">NDI (Neck)</option>
+      <option value="ODI">ODI (Back)</option>
+      <option value="QuickDash">QuickDash (UE)</option>
+      <option value="LEFS">LEFS (LE)</option>
+    </select></div>
+    <button class="refresh-btn" id="refresh-btn">↻ Refresh data</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-view="table">Summary table</button>
+    <button class="tab" data-view="charts">Provider charts</button>
+  </div>
+
+  <div class="nat-panel">
+    <div class="nat-panel-head">National averages (% MCID met) — edit to update</div>
+    <div class="nat-grid" id="nat-inputs"></div>
+  </div>
+
+  <div id="view-table">
+    <div class="metrics" id="metrics-row"></div>
+    <div class="tbl-card">
+      <table>
+        <thead>
+          <tr>
+            <th class="left">Provider</th>
+            <th class="left">Test</th>
+            <th>2+ Captured</th>
+            <th>Met</th>
+            <th>Not Met</th>
+            <th>No f/u (lost)</th>
+            <th>Total Patients</th>
+            <th class="th-lost">% Lost</th>
+            <th class="th-prov">Provider Avg</th>
+            <th class="th-co">Company Avg</th>
+            <th class="th-nat">National Avg</th>
+          </tr>
+        </thead>
+        <tbody id="tbl-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="view-charts" style="display:none">
+    <div class="chart-grid" id="chart-grid"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzZzuGGaBc9ZuIg5uu-UBXyOfuMXBnDQIi-B111qlWyzb7myiiXJCNuWjqHL4FRzohU/exec';
+const MEASURES = ['Neck Pain Function','Neck Pain','Back Function','Back Pain','UE Function','UE Pain','LE Function','LE Pain'];
+const SHEET_TAB_NAMES = {
+  'Neck Pain Function': 'Neck Pain Function',
+  'Neck Pain':          'Neck Pain',
+  'Back Function':      'Back Function',
+  'Back Pain':          'Back Pain',
+  'UE Function':        'UE Function',
+  'UE Pain':            'UE Pain',
+  'LE Function':        'LE Function',
+  'LE Pain':            'LE Pain'
+};
+
+// ============================================================
+// MAPPINGS
+// ============================================================
+const PROVIDER_CLINIC_FULL = {"Alicia DeGiso (1124537758)":"Connections Physical Therapy - Holliston","Alli DelGiudice (1891574422)":"Connections Physical Therapy - Leominster","Allyssa Chamberlain (1306205273)":"Connections Physical Therapy - Wellesley","Amanda Donahue (1265216113)":"Connections Physical Therapy - Worcester","Amanda St. John (1346529799)":"Connections Physical Therapy - Leominster","Amy Simmons (1508828757)":"Connections Physical Therapy - Portsmouth","Andrea Wasylow (1023085735)":"Connections Physical Therapy - Portsmouth","Anthony Sisti (1396726915)":"Connections Physical Therapy - Millis","Brent Kubik (1629440730)":"Connections Physical Therapy - Harvard","Brittany Gregory (1033887880)":"Live Free Physical Therapy","Carolyn Bertelson (1134689441)":"Connections Physical Therapy - Wellesley","Casey Bryson (1851885057)":"Connections Physical Therapy - Worcester","Chris Wilson (1235149071)":"Connections Physical Therapy - Millis","Colleen Dooley (1487134102)":"Live Free Physical Therapy","Corey Jackson (1558672881)":"Connections Physical Therapy - Leominster","Danielle Pacini (1144990045)":"Connections Physical Therapy - Fox Hill Village","Denivelisse Dominguez (1700661097)":"Connections Physical Therapy - Worcester","Elyssa Bartol (1467906404)":"Live Free Physical Therapy","Emma Alfred (1679086110)":"Connections Physical Therapy - Portsmouth","Greg Vespe (1457301137)":"Connections Physical Therapy - Portsmouth","Hailey Vaitkunas (1134798408)":"Connections Physical Therapy - Grafton","Heather Crane (1306214515)":"Holmes Physical Therapy - Groveland","JB Cordon (1386226033)":"Connections Physical Therapy - Harvard","Jamie Ockner (1952929127)":"Connections Physical Therapy - Wellesley","Jay Singer (1215577929)":"Connections Physical Therapy - Oxford","Jaylynn Griffin (1629236609)":"Connections Physical Therapy - Harvard","Jean Feder-Ewell (1831239201)":"Connections Physical Therapy - Wellesley","Jeanna Francis (1598598484)":"Connections Physical Therapy - Harvard","Jessica Yeskoo (1457875361)":"Connections Physical Therapy - Acton","Jessie Arnold (1376974469)":"Connections Physical Therapy - Grafton","Jillian Schlegel (1528895406)":"Holmes Physical Therapy - Amesbury","Josh Randall (1760496426)":"Connections Physical Therapy - Bristol","Joyanna Santolucito (1841570322)":"Connections Physical Therapy - Leominster","Julia Cassidy (1144832338)":"Connections Physical Therapy - Medway","Justina Dubsky (1902646177)":"Connections Physical Therapy - Worcester","Kaitlyn McDonald (1841035045)":"Holmes Physical Therapy - Salisbury","Katelin Collins (1619341286)":"Connections Physical Therapy - Pepperell","Katelyn Rondeau (1316315518)":"Connections Physical Therapy - Uxbridge","Katelynn Mellace (1912424011)":"Connections Physical Therapy - Pepperell","Katherine Thibault (1073093530)":"Holmes Physical Therapy - Amesbury","Kathryn Piersiak (1083213409)":"Medfield Orthopedic & Sports Therapy","Kelsey Dungan (1740095934)":"Live Free Physical Therapy","KerryLee McNeil (1508552381)":"Connections Physical Therapy - Fox Hill Village","Kimberly Limoli (1366928004)":"Holmes Physical Therapy - Salisbury","Kitty Lee (1023158219)":"Connections Physical Therapy - Pepperell","Kristin Meloni (1083017842)":"Medfield Orthopedic & Sports Therapy","Krystopher Grasmuck (1528661170)":"Connections Physical Therapy - Uxbridge","Kyle Contreras (1609512755)":"Live Free Physical Therapy","Laura Gull (1255502647)":"Connections Physical Therapy - Worcester","Lauren Crowley (1780303081)":"Connections Physical Therapy - Holliston","Lauren Trotta (1508037276)":"Connections Physical Therapy - Mansfield","Leo Harmon (1568019636)":"Connections Physical Therapy - Portsmouth","Maegan Auciello (1760047393)":"Connections Physical Therapy - Oxford","Mariah Liberty (1235687278)":"Connections Physical Therapy - Harvard","Marianne Peznola (1750610119)":"Connections Physical Therapy - Acton","Mark Mascheri (1255014478)":"Connections Physical Therapy - Mansfield","Mark Mikhaeal (1578397816)":"Medfield Orthopedic & Sports Therapy","Mary Kate Camara (1902389554)":"Connections Physical Therapy - Harvard","Maxwell Cantor (1093054884)":"Connections Physical Therapy - Worcester","Michele Kraman (1588645105)":"Connections Physical Therapy - Wellesley","Mitchel McNanna (1700418621)":"Connections Physical Therapy - Holliston","Nicole Carville (1073131454)":"Holmes Physical Therapy - Amesbury","Nicole Kushman (1639759483)":"Connections Physical Therapy - Worcester","Olga Kohlman (1609438308)":"Connections Physical Therapy - Fox Hill Village","Olga McDonough (1992238232)":"Connections Physical Therapy - Plainville","Pamela Pradhan (1881462307)":"Connections Physical Therapy - Holliston","Peter Smith (1376688333)":"Holmes Physical Therapy - Salisbury","Rachel Mudway (1154059327)":"Connections Physical Therapy - Harvard","Ryan  Silverthorne (1902550866)":"Connections Physical Therapy - Acton","Sarah Boettner (1114652955)":"Connections Physical Therapy - Leominster","Tanner Hulse (1275206047)":"Connections Physical Therapy - Millis","Thomas Musgrove (1760158638)":"Connections Physical Therapy - Acton","Tracy Moore (1861716649)":"Connections Physical Therapy - Pepperell","Victoria Wentworth (1689299729)":"Connections Physical Therapy - Pepperell","Yoselin Corella-Navarro (1760172308)":"Connections Physical Therapy - Worcester"};
+
+const CLINIC_SHORT = {
+  "Connections Physical Therapy - Acton":"Acton",
+  "Connections Physical Therapy - Bristol":"Bristol",
+  "Connections Physical Therapy - Fox Hill Village":"Fox Hill",
+  "Connections Physical Therapy - Grafton":"Grafton",
+  "Connections Physical Therapy - Harvard":"Harvard",
+  "Connections Physical Therapy - Holliston":"Holliston",
+  "Connections Physical Therapy - Leominster":"Leominster",
+  "Connections Physical Therapy - Mansfield":"Mansfield",
+  "Connections Physical Therapy - Medway":"Medway",
+  "Connections Physical Therapy - Millis":"Millis",
+  "Connections Physical Therapy - Oxford":"Oxford",
+  "Connections Physical Therapy - Pepperell":"Pepperell",
+  "Connections Physical Therapy - Plainville":"Plainville",
+  "Connections Physical Therapy - Portsmouth":"Portsmouth",
+  "Connections Physical Therapy - Uxbridge":"Uxbridge",
+  "Connections Physical Therapy - Wellesley":"Wellesley",
+  "Connections Physical Therapy - Worcester":"Worcester",
+  "Holmes Physical Therapy - Amesbury":"Amesbury",
+  "Holmes Physical Therapy - Groveland":"Groveland",
+  "Holmes Physical Therapy - Salisbury":"Salisbury",
+  "Live Free Physical Therapy":"Groton",
+  "Medfield Orthopedic & Sports Therapy":"Medfield",
+  "Dion Physical Therapy - Fall River":"Fall River"
+};
+
+const CLINIC_REGION = {
+  "Acton":"Blue","Bristol":"Orange","Fox Hill":"Green","Grafton":"Red",
+  "Harvard":"Blue","Holliston":"Green","Leominster":"Blue","Mansfield":"Green",
+  "Medway":"Green","Millis":"Green","Oxford":"Red","Pepperell":"Blue",
+  "Plainville":"Green","Portsmouth":"Orange","Uxbridge":"Red","Wellesley":"Green",
+  "Worcester":"Red","Fall River":"Orange","Amesbury":"Purple","Groveland":"Purple",
+  "Salisbury":"Purple","Groton":"Blue","Medfield":"Green"
+};
+
+function getClinicFull(p){ return PROVIDER_CLINIC_FULL[p]||'Unknown'; }
+function getClinicShort(p){ return CLINIC_SHORT[getClinicFull(p)]||getClinicFull(p); }
+function getRegion(p){ return CLINIC_REGION[getClinicShort(p)]||'Unknown'; }
+function getProviderName(p){ return p.replace(/\s*\(\d+\)\s*$/,'').trim(); }
+
+// ============================================================
+// MEASURES & GROUPS
+// ============================================================
+const OUTCOME_GROUPS = {
+  NDI:['Neck Pain Function','Neck Pain'],
+  ODI:['Back Function','Back Pain'],
+  QuickDash:['UE Function','UE Pain'],
+  LEFS:['LE Function','LE Pain']
+};
+const MEASURE_DISPLAY = {
+  'Neck Pain Function':'NDI (Function)','Neck Pain':'NDI (Pain)',
+  'Back Function':'ODI (Function)','Back Pain':'ODI (Pain)',
+  'UE Function':'QuickDash (Function)','UE Pain':'QuickDash (Pain)',
+  'LE Function':'LEFS (Function)','LE Pain':'LEFS (Pain)'
+};
+const MEASURE_ROW_CLASS = {
+  'Neck Pain Function':'row-neck-fn','Neck Pain':'row-neck-pain',
+  'Back Function':'row-back-fn','Back Pain':'row-back-pain',
+  'UE Function':'row-ue-fn','UE Pain':'row-ue-pain',
+  'LE Function':'row-le-fn','LE Pain':'row-le-pain'
+};
+const MEASURE_SHORT = {
+  'Neck Pain Function':'NDI Fn','Neck Pain':'NDI Pain',
+  'Back Function':'ODI Fn','Back Pain':'ODI Pain',
+  'UE Function':'QDASH Fn','UE Pain':'QDASH Pain',
+  'LE Function':'LEFS Fn','LE Pain':'LEFS Pain'
+};
+const NATIONAL_DEFAULTS = {
+  'Neck Pain Function':53,'Neck Pain':52,'Back Function':52,'Back Pain':54,
+  'UE Function':53,'UE Pain':53,'LE Function':52,'LE Pain':52
+};
+const NATIONAL_LABELS = {
+  'Neck Pain Function':'NDI Function','Neck Pain':'NDI Pain',
+  'Back Function':'ODI Function','Back Pain':'ODI Pain',
+  'UE Function':'QuickDash Function','UE Pain':'QuickDash Pain',
+  'LE Function':'LEFS Function','LE Pain':'LEFS Pain'
+};
+let nationalAvgs = {...NATIONAL_DEFAULTS};
+
+// Global company averages — recalculated after data loads
+let GLOBAL_CO_AVGS = {
+  'Neck Pain Function':56,'Neck Pain':80,'Back Function':62,'Back Pain':78,
+  'UE Function':67,'UE Pain':77,'LE Function':64,'LE Pain':72
+};
+
+let charts = {};
+
+// ============================================================
+// DATA STORE
+// ============================================================
+let ALL_DATA = []; // aggregated rows: {provider, year, quarter, measure, two_plus, met, not_met, total}
+
+// ============================================================
+// GOOGLE SHEETS FETCHING
+// ============================================================
+function sheetTabName(year, measure) {
+  return `${year}_${SHEET_TAB_NAMES[measure]}`;
+}
+
+async function fetchSheetRows(tabName) {
+  const url = APPS_SCRIPT_URL + '?sheet=' + encodeURIComponent(tabName);
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  const json = await resp.json();
+  if (json.error) throw new Error(json.error);
+  return Array.isArray(json) ? json : [];
+}
+
+function parseCSVText(text) {
+  const lines = text.split('\n').filter(l => l.trim());
+  if (!lines.length) return [];
+  function parseLine(line) {
+    const result = []; let cur = ''; let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      if (line[i] === '"') { inQ = !inQ; }
+      else if (line[i] === ',' && !inQ) { result.push(cur.trim()); cur = ''; }
+      else cur += line[i];
+    }
+    result.push(cur.trim());
+    return result;
+  }
+  const headers = parseLine(lines[0]).map(h => h.replace(/^"|"$/g,'').trim());
+  return lines.slice(1).map(line => {
+    const vals = parseLine(line);
+    const obj = {};
+    headers.forEach((h,i) => obj[h] = (vals[i]||'').replace(/^"|"$/g,'').trim());
+    return obj;
+  });
+}
+
+async function fetchSheetTab(year, measure) {
+  const tabName = sheetTabName(year, measure);
+  try {
+    const rows = await fetchSheetRows(tabName);
+    if (!rows.length) return [];
+    const agg = {};
+    rows.forEach(r => {
+      const dateStr = r['Date of Initial eval'] || '';
+      const survey = parseInt(r['Survey Count'] || '0');
+      const perf = r['Performance'] || '';
+      const prov = r['Provider Name'] || '';
+      if (!prov || !dateStr) return;
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return;
+      const rowYear = d.getFullYear();
+      const quarter = Math.ceil((d.getMonth() + 1) / 3);
+      // Use the tab's year for assignment (handles carry-overs correctly)
+      const assignYear = year;
+      const key = `${prov}|||${assignYear}|||${quarter}|||${measure}`;
+      if (!agg[key]) agg[key] = {provider:prov, year:assignYear, quarter, measure, two_plus:0, met:0, not_met:0, total:0};
+      const a = agg[key];
+      a.two_plus += survey >= 2 ? 1 : 0;
+      a.met      += perf === 'Met' ? 1 : 0;
+      a.not_met  += perf === 'Not Met' ? 1 : 0;
+      a.total    += 1;
+    });
+    return Object.values(agg);
+  } catch(e) {
+    console.warn(`Failed to fetch ${year} ${measure}:`, e);
+    return [];
+  }
+}
+
+async function loadAllData() {
+  setStatus('loading', 'Loading data…');
+  setLoadingBar(0);
+  document.getElementById('loading-overlay').classList.remove('hidden');
+
+  // Detect available years by trying to fetch; start with known years and try ahead
+  const yearsToTry = [2025, 2026, 2027];
+  const allRows = [];
+  const totalTabs = yearsToTry.length * MEASURES.length;
+  let completed = 0;
+
+  for (const year of yearsToTry) {
+    let yearHasData = false;
+    for (const measure of MEASURES) {
+      document.getElementById('loading-text').textContent = `Loading ${year} ${MEASURE_SHORT[measure]}…`;
+      const rows = await fetchSheetTab(year, measure);
+      if (rows.length > 0) {
+        yearHasData = true;
+        allRows.push(...rows);
+      }
+      completed++;
+      setLoadingBar(Math.round(completed / totalTabs * 100));
+    }
+    if (!yearHasData && year > 2025) break; // stop trying future years if empty
+  }
+
+  ALL_DATA = allRows;
+
+  // Recalculate global company averages from all loaded data
+  recalcCompanyAvgs();
+
+  document.getElementById('loading-overlay').classList.add('hidden');
+
+  if (ALL_DATA.length === 0) {
+    setStatus('err', 'No data found — check Sheet sharing settings');
+    return false;
+  }
+
+  const years = [...new Set(ALL_DATA.map(r=>r.year))].sort();
+  setStatus('ok', `Data loaded · ${years.join(', ')}`);
+  return true;
+}
+
+function recalcCompanyAvgs() {
+  const ct = {};
+  MEASURES.forEach(m => ct[m] = {met:0, two_plus:0});
+  ALL_DATA.forEach(r => {
+    if (ct[r.measure]) {
+      ct[r.measure].met += r.met;
+      ct[r.measure].two_plus += r.two_plus;
+    }
+  });
+  MEASURES.forEach(m => {
+    GLOBAL_CO_AVGS[m] = ct[m].two_plus > 0 ? Math.round(ct[m].met / ct[m].two_plus * 100) : 0;
+  });
+}
+
+function setStatus(state, text) {
+  const dot = document.getElementById('status-dot');
+  dot.className = 'status-dot ' + state;
+  document.getElementById('status-text').textContent = text;
+}
+
+function setLoadingBar(pct) {
+  document.getElementById('loading-bar').style.width = pct + '%';
+}
+
+// ============================================================
+// FILTERS
+// ============================================================
+function getMeasuresForOutcome(outcome) {
+  if (outcome === 'all') return MEASURES;
+  return OUTCOME_GROUPS[outcome] || MEASURES;
+}
+
+function filteredData() {
+  const year    = document.getElementById('f-year').value;
+  const quarter = document.getElementById('f-quarter').value;
+  const region  = document.getElementById('f-region').value;
+  const clinic  = document.getElementById('f-clinic').value;
+  const prov    = document.getElementById('f-provider').value;
+  const outcome = document.getElementById('f-outcome').value;
+  const allowed = getMeasuresForOutcome(outcome);
+  return ALL_DATA.filter(r => {
+    if (year !== 'all' && r.year != year) return false;
+    if (quarter !== 'all' && r.quarter != quarter) return false;
+    if (region !== 'all' && getRegion(r.provider) !== region) return false;
+    if (clinic !== 'all' && getClinicShort(r.provider) !== clinic) return false;
+    if (prov !== 'all' && r.provider !== prov) return false;
+    if (!allowed.includes(r.measure)) return false;
+    return true;
+  });
+}
+
+function initFilters() {
+  const years = [...new Set(ALL_DATA.map(r=>r.year))].sort();
+  const allRegions = [...new Set(Object.values(CLINIC_REGION))].sort();
+  const allClinics = [...new Set(ALL_DATA.map(r=>getClinicShort(r.provider)))].filter(c=>c!=='Unknown').sort();
+  const allProviders = [...new Set(ALL_DATA.map(r=>r.provider))].sort((a,b)=>getProviderName(a).localeCompare(getProviderName(b)));
+
+  const ysel = document.getElementById('f-year');
+  while (ysel.options.length > 1) ysel.remove(1);
+  years.forEach(y => { const o=document.createElement('option'); o.value=y; o.textContent=y; ysel.appendChild(o); });
+
+  const rsel = document.getElementById('f-region');
+  while (rsel.options.length > 1) rsel.remove(1);
+  allRegions.forEach(r => { const o=document.createElement('option'); o.value=r; o.textContent=r+' Region'; rsel.appendChild(o); });
+
+  populateClinics(allClinics);
+
+  const psel = document.getElementById('f-provider');
+  while (psel.options.length > 1) psel.remove(1);
+  allProviders.forEach(p => { const o=document.createElement('option'); o.value=p; o.textContent=getProviderName(p)+' ('+getClinicShort(p)+')'; psel.appendChild(o); });
+
+  ['f-year','f-quarter','f-region','f-clinic','f-provider','f-outcome'].forEach(id => {
+    document.getElementById(id).addEventListener('change', () => {
+      if (id === 'f-region') updateClinicDropdown();
+      render();
+    });
+  });
+}
+
+function populateClinics(clinics) {
+  const csel = document.getElementById('f-clinic');
+  while (csel.options.length > 1) csel.remove(1);
+  clinics.forEach(c => { const o=document.createElement('option'); o.value=c; o.textContent=c; csel.appendChild(o); });
+}
+
+function updateClinicDropdown() {
+  const region = document.getElementById('f-region').value;
+  const prev = document.getElementById('f-clinic').value;
+  const clinics = [...new Set(ALL_DATA.map(r=>getClinicShort(r.provider)))]
+    .filter(c => c !== 'Unknown')
+    .filter(c => region === 'all' || CLINIC_REGION[c] === region)
+    .sort();
+  populateClinics(clinics);
+  if (clinics.includes(prev)) document.getElementById('f-clinic').value = prev;
+}
+
+// ============================================================
+// NATIONAL INPUTS
+// ============================================================
+function initNationalInputs() {
+  const cont = document.getElementById('nat-inputs');
+  MEASURES.forEach(m => {
+    const d = document.createElement('div'); d.className = 'nat-item';
+    const lbl = document.createElement('label'); lbl.textContent = NATIONAL_LABELS[m];
+    const inp = document.createElement('input');
+    inp.type='number'; inp.min=0; inp.max=100; inp.step=1; inp.value=nationalAvgs[m];
+    inp.addEventListener('change', () => { nationalAvgs[m] = parseFloat(inp.value)||0; render(); });
+    d.appendChild(lbl); d.appendChild(inp); cont.appendChild(d);
+  });
+}
+
+// ============================================================
+// AGGREGATION
+// ============================================================
+function pct(n, d) { return d > 0 ? Math.round(n / d * 100) : null; }
+
+function aggregate(data) {
+  const agg = {};
+  data.forEach(r => {
+    if (!agg[r.provider]) agg[r.provider] = {};
+    if (!agg[r.provider][r.measure]) agg[r.provider][r.measure] = {two_plus:0,met:0,not_met:0,total:0};
+    const a = agg[r.provider][r.measure];
+    a.two_plus+=r.two_plus; a.met+=r.met; a.not_met+=r.not_met; a.total+=r.total;
+  });
+  return agg;
+}
+
+// ============================================================
+// TABLE
+// ============================================================
+function renderTable(data) {
+  const agg = aggregate(data);
+  const outcome = document.getElementById('f-outcome').value;
+  const allowed = getMeasuresForOutcome(outcome);
+  const providers = Object.keys(agg).sort((a,b) => {
+    const ca=getClinicShort(a), cb=getClinicShort(b);
+    if (ca!==cb) return ca.localeCompare(cb);
+    return getProviderName(a).localeCompare(getProviderName(b));
+  });
+
+  let totalPts=0,totalMet=0,totalLost=0;
+  data.forEach(r => { totalPts+=r.total; totalMet+=r.met; totalLost+=(r.total-r.two_plus); });
+  document.getElementById('metrics-row').innerHTML=`
+    <div class="metric"><div class="val">${providers.length}</div><div class="lbl">Providers</div></div>
+    <div class="metric"><div class="val">${totalPts.toLocaleString()}</div><div class="lbl">Patient-measures</div></div>
+    <div class="metric"><div class="val">${totalMet.toLocaleString()}</div><div class="lbl">MCID met</div></div>
+    <div class="metric"><div class="val">${pct(totalMet,totalPts)??'—'}%</div><div class="lbl">Overall avg</div></div>
+    <div class="metric"><div class="val">${totalLost.toLocaleString()}</div><div class="lbl">No follow-up</div></div>
+    <div class="metric"><div class="val">${pct(totalLost,totalPts)??'—'}%</div><div class="lbl">% Lost</div></div>
+  `;
+
+  let html = '';
+  let prevClinic = null, provIndex = 0;
+
+  providers.forEach(prov => {
+    const clinic = getClinicShort(prov);
+    const region = getRegion(prov);
+    if (clinic !== prevClinic) {
+      html += `<tr class="group-sep region-${region}"><td colspan="11">${clinic} &nbsp;·&nbsp; ${region} Region</td></tr>`;
+      prevClinic = clinic; provIndex = 0;
+    }
+    const provData = agg[prov];
+    const measuresToShow = allowed.filter(m => provData[m]);
+    if (!measuresToShow.length) return;
+
+    const provRowClass = provIndex % 2 === 0 ? 'prov-a' : 'prov-b';
+    measuresToShow.forEach((m, mi) => {
+      const d = provData[m] || {two_plus:0,met:0,not_met:0,total:0};
+      const nofu = d.total - d.two_plus;
+      const provAvg = pct(d.met, d.two_plus);
+      const coAvg = GLOBAL_CO_AVGS[m];
+      const natAvg = nationalAvgs[m];
+      let provBadge = provAvg !== null
+        ? `<span class="badge ${provAvg>=coAvg?'above':'below'}">${provAvg}%</span>`
+        : `<span class="badge na">—</span>`;
+      const firstRowClass = mi === 0 ? 'prov-first' : '';
+      html += `<tr class="${MEASURE_ROW_CLASS[m]} ${provRowClass} ${firstRowClass}">`;
+      if (mi === 0) html += `<td class="left provider-name" rowspan="${measuresToShow.length}" style="vertical-align:middle">${getProviderName(prov)}</td>`;
+      html += `<td class="left measure-name">${MEASURE_DISPLAY[m]}</td>`;
+      html += `<td class="mono">${d.two_plus||'—'}</td>`;
+      html += `<td class="mono">${d.met||'—'}</td>`;
+      html += `<td class="mono">${d.not_met||'—'}</td>`;
+      html += `<td class="mono">${nofu||'—'}</td>`;
+      html += `<td class="mono">${d.total||'—'}</td>`;
+      html += `<td class="mono" style="background:#fff0f0">${pct(nofu,d.total)!==null?pct(nofu,d.total)+'%':'—'}</td>`;
+      html += `<td>${provBadge}</td>`;
+      html += `<td class="mono">${coAvg!==null?coAvg+'%':'—'}</td>`;
+      html += `<td class="mono">${natAvg}%</td>`;
+      html += '</tr>';
+    });
+    provIndex++;
+  });
+
+  document.getElementById('tbl-body').innerHTML = html;
+}
+
+// ============================================================
+// CHARTS
+// ============================================================
+function renderCharts(data) {
+  Object.values(charts).forEach(c => { try{c.destroy();}catch(e){} });
+  charts = {};
+  const agg = aggregate(data);
+  const outcome = document.getElementById('f-outcome').value;
+  const allowed = getMeasuresForOutcome(outcome);
+  const providers = Object.keys(agg).sort((a,b)=>getProviderName(a).localeCompare(getProviderName(b)));
+  const grid = document.getElementById('chart-grid');
+  grid.innerHTML = '';
+
+  if (!providers.length) {
+    grid.innerHTML = '<div class="no-data">No data for current filters.</div>';
+    return;
+  }
+
+  providers.forEach(prov => {
+    const provData = agg[prov];
+    const measuresToShow = allowed.filter(m => provData[m]);
+    if (!measuresToShow.length) return;
+
+    const labels = measuresToShow.map(m => MEASURE_SHORT[m]);
+    const provVals = measuresToShow.map(m => pct(provData[m]?.met, provData[m]?.two_plus) ?? 0);
+    const coVals = measuresToShow.map(m => GLOBAL_CO_AVGS[m] ?? 0);
+    const natVals = measuresToShow.map(m => nationalAvgs[m] ?? 0);
+    const barColors = provVals.map((v,i) => v >= coVals[i] ? 'rgba(21,128,61,0.75)' : 'rgba(185,28,28,0.75)');
+    const barH = Math.max(180, measuresToShow.length * 38 + 60);
+
+    const card = document.createElement('div'); card.className = 'chart-card';
+    const cid = 'chart_' + prov.replace(/\W/g,'_');
+    card.innerHTML = `
+      <h3>${getProviderName(prov)}</h3>
+      <div class="chart-sub">${getClinicShort(prov)} · ${getRegion(prov)} Region</div>
+      <div class="chart-legend">
+        <span><i class="leg-sq" style="background:rgba(21,128,61,.75)"></i>Above co. avg</span>
+        <span><i class="leg-sq" style="background:rgba(185,28,28,.75)"></i>Below co. avg</span>
+        <span style="border-left:2px dashed #c2410c;padding-left:6px">Company avg</span>
+        <span style="border-left:2px dashed #15803d;padding-left:6px">National avg</span>
+      </div>
+      <div class="chart-wrap" style="height:${barH}px"><canvas id="${cid}"></canvas></div>`;
+    grid.appendChild(card);
+
+    const ctx = document.getElementById(cid);
+    charts[cid] = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets:[{
+          data: provVals,
+          backgroundColor: barColors,
+          borderColor: 'rgba(255,255,255,0.9)',
+          borderWidth: 2,
+          borderRadius: 3,
+          barPercentage: 0.55,
+          categoryPercentage: 0.85
+        }]
+      },
+      options:{
+        indexAxis:'y', responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>` ${c.raw}%`}} },
+        layout:{padding:{right:44}},
+        scales:{
+          x:{min:0,max:100,ticks:{callback:v=>v+'%',font:{family:"'DM Mono',monospace",size:10}},grid:{color:'rgba(0,0,0,.06)'}},
+          y:{ticks:{font:{family:"'DM Mono',monospace",size:10}}}
+        }
+      },
+      plugins:[
+        {
+          id:'refLines',
+          afterDraw(chart){
+            const {ctx:c,scales:{x,y}}=chart;
+            c.save();
+            measuresToShow.forEach((m,i)=>{
+              const bar=chart.getDatasetMeta(0).data[i];
+              if(!bar) return;
+              const cy=bar.y, h=bar.height;
+              const cx=x.getPixelForValue(GLOBAL_CO_AVGS[m]??0);
+              c.strokeStyle='#c2410c'; c.lineWidth=1.5; c.setLineDash([4,3]);
+              c.beginPath(); c.moveTo(cx,cy-h/2); c.lineTo(cx,cy+h/2); c.stroke();
+              const nx=x.getPixelForValue(nationalAvgs[m]??0);
+              c.strokeStyle='#15803d';
+              c.beginPath(); c.moveTo(nx,cy-h/2); c.lineTo(nx,cy+h/2); c.stroke();
+            });
+            c.restore();
+          }
+        },
+        {
+          id:'dataLabels',
+          afterDatasetsDraw(chart){
+            const {ctx:c,data,scales:{x}}=chart;
+            c.save(); c.font="500 11px 'DM Mono',monospace";
+            c.textAlign='left'; c.textBaseline='middle';
+            data.datasets[0].data.forEach((val,i)=>{
+              const bar=chart.getDatasetMeta(0).data[i];
+              c.fillStyle='#1c1b18';
+              c.fillText(val+'%',x.getPixelForValue(val)+5,bar.y);
+            });
+            c.restore();
+          }
+        }
+      ]
+    });
+  });
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function render() {
+  const data = filteredData();
+  const view = document.querySelector('.tab.active').dataset.view;
+  document.getElementById('view-table').style.display = view==='table' ? 'block' : 'none';
+  document.getElementById('view-charts').style.display = view==='charts' ? 'block' : 'none';
+  if (view === 'table') renderTable(data);
+  else renderCharts(data);
+}
+
+// Tabs
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    render();
+  });
+});
+
+// Refresh button
+document.getElementById('refresh-btn').addEventListener('click', async () => {
+  document.getElementById('refresh-btn').textContent = '↻ Refreshing…';
+  await loadAllData();
+  initFilters();
+  render();
+  document.getElementById('refresh-btn').textContent = '↻ Refresh data';
+});
+
+// ============================================================
+// BOOT
+// ============================================================
+initNationalInputs();
+loadAllData().then(ok => {
+  if (ok) { initFilters(); render(); }
+});
+</script>
+</body>
+</html>
