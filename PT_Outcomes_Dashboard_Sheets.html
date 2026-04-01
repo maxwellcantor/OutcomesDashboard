@@ -418,20 +418,27 @@ async function loadAllData() {
   const totalTabs = yearsToTry.length * MEASURES.length;
   let completed = 0;
 
+  document.getElementById('loading-text').textContent = `Loading all data…`;
+
+  const fetchTasks = [];
   for (const year of yearsToTry) {
-    let yearHasData = false;
     for (const measure of MEASURES) {
-      document.getElementById('loading-text').textContent = `Loading ${year} ${MEASURE_SHORT[measure]}…`;
-      const rows = await fetchSheetTab(year, measure);
-      if (rows.length > 0) {
-        yearHasData = true;
-        allRows.push(...rows);
-      }
+      fetchTasks.push({ year, measure });
+    }
+  }
+
+  const results = await Promise.all(fetchTasks.map(({ year, measure }) =>
+    fetchSheetTab(year, measure).then(rows => {
       completed++;
       setLoadingBar(Math.round(completed / totalTabs * 100));
-    }
-    if (!yearHasData && year > 2025) break; // stop trying future years if empty
-  }
+      document.getElementById('loading-text').textContent = `Loaded ${completed} of ${totalTabs} measures…`;
+      return rows;
+    })
+  ));
+
+  results.forEach(rows => {
+    if (rows.length > 0) allRows.push(...rows);
+  });
 
   ALL_DATA = allRows;
 
