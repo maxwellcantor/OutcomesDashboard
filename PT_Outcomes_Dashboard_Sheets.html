@@ -283,12 +283,21 @@ const CLINIC_REGION = {
 
 // Build NPI-keyed lookup so name changes in the platform don't break mappings
 const NPI_TO_CLINIC = {};
+const STAFF_NAME_TO_CLINIC = {}; // loaded from Staff tab
 Object.entries(PROVIDER_CLINIC_FULL).forEach(([name, clinic]) => {
   const m = name.match(/\((\d+)\)/);
   if (m) NPI_TO_CLINIC[m[1]] = clinic;
 });
 function extractNPI(p) { const m = String(p).match(/\((\d+)\)/); return m ? m[1] : null; }
-function getClinicFull(p) { const npi = extractNPI(p); return (npi && NPI_TO_CLINIC[npi]) || PROVIDER_CLINIC_FULL[p] || 'Unknown'; }
+function getClinicFull(p) {
+  const npi = extractNPI(p);
+  if (npi && NPI_TO_CLINIC[npi]) return NPI_TO_CLINIC[npi];
+  if (PROVIDER_CLINIC_FULL[p]) return PROVIDER_CLINIC_FULL[p];
+  // Try matching by display name against Staff tab
+  const displayName = getProviderName(p).toLowerCase();
+  if (STAFF_NAME_TO_CLINIC[displayName]) return STAFF_NAME_TO_CLINIC[displayName];
+  return 'Unknown';
+}
 function getClinicShort(p){ return CLINIC_SHORT[getClinicFull(p)]||getClinicFull(p); }
 function getRegion(p){ return CLINIC_REGION[getClinicShort(p)]||'Unknown'; }
 // Name normalization — maps all known variants to canonical display name
@@ -535,8 +544,8 @@ async function loadAllData() {
     if (rows.length > 0) allRows.push(...rows);
   });
 
-  // Normalize all provider strings to NPI-keyed canonical form so
-  // name variants across tabs/years merge into a single provider entry
+  // Normalize provider display names so name variants across tabs show consistently
+  // fetchSheetTab already aggregated by NPI within each tab — no re-summing needed
   const npiToCanonical = {};
   allRows.forEach(r => {
     const m = r.provider.match(/\((\d+)\)/);
@@ -547,20 +556,46 @@ async function loadAllData() {
     if (m && npiToCanonical[m[1]]) r.provider = npiToCanonical[m[1]];
   });
 
-  // Merge any rows that now share the same key after normalization
-  const mergeMap = {};
-  allRows.forEach(r => {
-    const k = `${r.provider}|||${r.year}|||${r.quarter}|||${r.measure}`;
-    if (!mergeMap[k]) { mergeMap[k] = {...r}; }
-    else {
-      mergeMap[k].two_plus += r.two_plus;
-      mergeMap[k].met      += r.met;
-      mergeMap[k].not_met  += r.not_met;
-      mergeMap[k].total    += r.total;
-    }
-  });
+  ALL_DATA = allRows;
 
-  ALL_DATA = Object.values(mergeMap);
+  // Fetch national averages from Google Sheet and update inputs
+  try {
+    const natRows = await fetchSheetRows('National Averages');
+    natRows.forEach(row => {
+      const measure = row['Measure'];
+      const avg = parseFloat(row['Average']);
+      if (measure && !isNaN(avg) && nationalAvgs.hasOwnProperty(measure)) {
+        nationalAvgs[measure] = avg;
+      }
+    });
+    // Update the input fields to reflect loaded values
+    document.querySelectorAll('.nat-avg-input').forEach(inp => {
+      const m = inp.dataset.measure;
+      if (m && nationalAvgs[m] !== undefined) inp.value = nationalAvgs[m];
+    });
+  } catch(e) {
+    console.warn('Could not load National Averages tab:', e.message);
+  }
+
+  // Fetch Staff tab to get dynamic provider->clinic mappings
+  // Staff tab has Name and Clinic (short name) columns — no NPI needed
+  try {
+    const staffRows = await fetchSheetRows('Staff');
+    // Build a name->clinicFull lookup from Staff tab using short->full clinic map
+    const SHORT_TO_FULL = {};
+    Object.entries(CLINIC_SHORT).forEach(([full, short]) => SHORT_TO_FULL[short] = full);
+    staffRows.forEach(row => {
+      const name = String(row['Name'] || '').trim();
+      const shortClinic = String(row['Clinic'] || '').trim();
+      const fullClinic = SHORT_TO_FULL[shortClinic] || shortClinic;
+      if (name && fullClinic) {
+        // Store by name for fallback lookup
+        STAFF_NAME_TO_CLINIC[name.toLowerCase()] = fullClinic;
+      }
+    });
+  } catch(e) {
+    console.warn('Could not load Staff tab:', e.message);
+  }
 
   // Recalculate global company averages from all loaded data
   recalcCompanyAvgs();
@@ -637,6 +672,10 @@ function initFilters() {
   const ysel = document.getElementById('f-year');
   while (ysel.options.length > 1) ysel.remove(1);
   years.forEach(y => { const o=document.createElement('option'); o.value=y; o.textContent=y; ysel.appendChild(o); });
+  // Default to current year if available, otherwise most recent year
+  const currentYear = new Date().getFullYear();
+  const defaultYear = years.includes(currentYear) ? currentYear : years[years.length - 1];
+  if (defaultYear) ysel.value = defaultYear;
 
   const rsel = document.getElementById('f-region');
   while (rsel.options.length > 1) rsel.remove(1);
@@ -683,6 +722,7 @@ function initNationalInputs() {
     const lbl = document.createElement('label'); lbl.textContent = NATIONAL_LABELS[m];
     const inp = document.createElement('input');
     inp.type='number'; inp.min=0; inp.max=100; inp.step=1; inp.value=nationalAvgs[m];
+    inp.className = 'nat-avg-input'; inp.dataset.measure = m;
     inp.addEventListener('change', () => { nationalAvgs[m] = parseFloat(inp.value)||0; render(); });
     d.appendChild(lbl); d.appendChild(inp); cont.appendChild(d);
   });
