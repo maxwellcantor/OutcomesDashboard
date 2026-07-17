@@ -111,6 +111,7 @@ tbody tr:last-child td{border-bottom:none}
 .dm-strip .s-val{font-size:23px;font-weight:700;line-height:1;color:#2d3340}
 .dm-strip .s-val.met{color:#4a9d76}
 .dm-strip .s-val.notmet{color:#c97b74}
+.dm-strip .s-val.excl{color:#b58549}
 .dm-strip .s-lbl{font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em}
 .dm-table{width:100%;border-collapse:collapse;font-size:14px}
 .dm-table thead th{text-align:left;padding:11px 14px;font-size:12px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid #eceef1}
@@ -119,9 +120,12 @@ tbody tr:last-child td{border-bottom:none}
 .dm-pill{display:inline-flex;align-items:center;gap:7px;font-weight:600;font-size:13px;padding:4px 12px 4px 9px;border-radius:20px}
 .dm-pill.met{background:#e7f6ee;color:#4a9d76}
 .dm-pill.notmet{background:#fdeceb;color:#c97b74}
+.dm-pill.excl{background:#fdf3e3;color:#b58549}
 .dm-ic{width:16px;height:16px;flex-shrink:0}
 .dm-pill.met .dm-ic{color:#6cbf99}
 .dm-pill.notmet .dm-ic{color:#e09a94}
+.dm-pill.excl .dm-ic{color:#d9ab6f}
+.dm-dash{color:#c8ccd2;font-size:15px}
 .dm-emr{font-family:'DM Mono',ui-monospace,monospace;font-size:13px;color:#374151}
 .dm-empty{padding:40px;text-align:center;color:#9ca3af;font-size:14px}
 .group-sep.region-Blue td{background:#1d4ed8}
@@ -177,9 +181,10 @@ tbody tr[class*="row-"]:hover td{filter:brightness(.97)}
     </div>
     <div class="dm-body">
       <div class="dm-strip">
-        <div class="s-item"><span class="s-val" id="dm-total">–</span><span class="s-lbl">Patients (2+)</span></div>
+        <div class="s-item"><span class="s-val" id="dm-total">–</span><span class="s-lbl">Patients</span></div>
         <div class="s-item"><span class="s-val met" id="dm-met">–</span><span class="s-lbl">Adj. Met</span></div>
         <div class="s-item"><span class="s-val notmet" id="dm-notmet">–</span><span class="s-lbl">Adj. Not Met</span></div>
+        <div class="s-item"><span class="s-val excl" id="dm-excl">–</span><span class="s-lbl">Excluded</span></div>
         <div class="s-item"><span class="s-val" id="dm-rate">–</span><span class="s-lbl">Adj. Rate</span></div>
       </div>
       <table class="dm-table">
@@ -188,7 +193,7 @@ tbody tr[class*="row-"]:hover td{filter:brightness(.97)}
         </thead>
         <tbody id="dm-rows"></tbody>
       </table>
-      <div class="dm-empty" id="dm-empty" style="display:none">No non-excluded patient rows for this measure.</div>
+      <div class="dm-empty" id="dm-empty" style="display:none">No patient rows for this measure.</div>
     </div>
   </div>
 </div>
@@ -911,6 +916,7 @@ function renderTable(data) {
 // ============================================================
 const DM_CHECK = '<svg class="dm-ic" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="8"/><path d="M6.5 10.5l2.2 2.2 4.8-5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const DM_X = '<svg class="dm-ic" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="8"/><path d="M7 7l6 6M13 7l-6 6" stroke-linecap="round"/></svg>';
+const DM_SLASH = '<svg class="dm-ic" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="8"/><path d="M4.6 15.4L15.4 4.6" stroke-linecap="round"/></svg>';
 
 function emrIdFromPatientId(pid) {
   const parts = String(pid).split('+');
@@ -951,8 +957,7 @@ function openDetailModal(npi, measure, encodedProv) {
     rows = rows.filter(r => String(r.quarter) === String(quarterFilter));
   }
 
-  // Exclude Exclusion rows entirely
-  rows = rows.filter(r => r.performance !== 'Exclusion');
+  // All patients are shown, including Exclusions
 
   // Title / subtitle
   document.getElementById('dm-title').textContent = `${getProviderName(prov)} — ${MEASURE_DISPLAY[measure]}`;
@@ -969,26 +974,52 @@ function openDetailModal(npi, measure, encodedProv) {
     emptyEl.style.display = 'block';
   } else {
     emptyEl.style.display = 'none';
-    let metCount = 0;
-    tbody.innerHTML = rows.map(r => {
+
+    // Evaluated rows first, exclusions grouped at the bottom
+    const ordered = rows.slice().sort((a, b) => {
+      const ax = a.performance === 'Exclusion' ? 1 : 0;
+      const bx = b.performance === 'Exclusion' ? 1 : 0;
+      return ax - bx;
+    });
+
+    let metCount = 0, notMetCount = 0, exclCount = 0;
+    tbody.innerHTML = ordered.map(r => {
       const perf = r.performance;
-      const perfClass = perf === 'Met' ? 'met' : 'notmet';
-      const perfIcon  = perf === 'Met' ? DM_CHECK : DM_X;
-      const adj = computeAdjusted(r);
-      if (adj === 'Met') metCount++;
-      const adjClass = adj === 'Met' ? 'met' : 'notmet';
-      const adjIcon  = adj === 'Met' ? DM_CHECK : DM_X;
+      const isExcl = perf === 'Exclusion';
+
+      let perfClass, perfIcon;
+      if (isExcl)              { perfClass = 'excl';   perfIcon = DM_SLASH; }
+      else if (perf === 'Met') { perfClass = 'met';    perfIcon = DM_CHECK; }
+      else                     { perfClass = 'notmet'; perfIcon = DM_X; }
+
+      // Exclusions can't be evaluated — show a dash, don't count toward the rate
+      let adjCell;
+      if (isExcl) {
+        exclCount++;
+        adjCell = '<span class="dm-dash">–</span>';
+      } else {
+        const adj = computeAdjusted(r);
+        if (adj === 'Met') metCount++; else notMetCount++;
+        const adjClass = adj === 'Met' ? 'met' : 'notmet';
+        const adjIcon  = adj === 'Met' ? DM_CHECK : DM_X;
+        adjCell = `<span class="dm-pill ${adjClass}">${adjIcon}${adj}</span>`;
+      }
+
       return `<tr>
         <td class="dm-emr">${emrIdFromPatientId(r.patientId)}</td>
         <td><span class="dm-pill ${perfClass}">${perfIcon}${perf}</span></td>
-        <td><span class="dm-pill ${adjClass}">${adjIcon}${adj}</span></td>
+        <td>${adjCell}</td>
       </tr>`;
     }).join('');
 
-    document.getElementById('dm-total').textContent = rows.length;
-    document.getElementById('dm-met').textContent = metCount;
-    document.getElementById('dm-notmet').textContent = rows.length - metCount;
-    document.getElementById('dm-rate').textContent = Math.round(metCount / rows.length * 100) + '%';
+    const evaluated = metCount + notMetCount;
+    document.getElementById('dm-total').textContent  = ordered.length;
+    document.getElementById('dm-met').textContent    = metCount;
+    document.getElementById('dm-notmet').textContent = notMetCount;
+    document.getElementById('dm-excl').textContent   = exclCount;
+    document.getElementById('dm-rate').textContent   = evaluated > 0
+      ? Math.round(metCount / evaluated * 100) + '%'
+      : '—';
   }
 
   document.getElementById('dm-overlay').classList.add('open');
