@@ -1248,6 +1248,7 @@ function buildExportPage(prov, year) {
   const measureRows = measures.map(m => {
     const d = data[m];
     const nofu = d.total - d.two_plus;
+    const lostPct = pct(nofu, d.total);
     const provAvg = pct(d.met, d.two_plus);
     const coAvg = GLOBAL_CO_AVGS[m];
     const natAvg = nationalAvgs[m];
@@ -1260,6 +1261,7 @@ function buildExportPage(prov, year) {
       <td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center;font-family:'DM Mono',monospace">${d.not_met||'—'}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center;font-family:'DM Mono',monospace">${nofu||'—'}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center;font-family:'DM Mono',monospace">${d.total||'—'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center;font-family:'DM Mono',monospace;background:#fff0f0;color:#881337">${lostPct!==null?lostPct+'%':'—'}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center"><span style="background:${avgBg};color:${avgColor};font-weight:400;padding:2px 9px;border-radius:20px;font-family:'DM Mono',monospace;font-size:12px">${provAvg!==null?provAvg+'%':'—'}</span></td>
       <td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center;font-family:'DM Mono',monospace;color:#555">${coAvg!==null?coAvg+'%':'—'}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center;font-family:'DM Mono',monospace;color:#555">${natAvg}%</td>
@@ -1292,6 +1294,7 @@ function buildExportPage(prov, year) {
           <th style="padding:7px 10px;text-align:center;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#888">Not Met</th>
           <th style="padding:7px 10px;text-align:center;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#888">No F/U</th>
           <th style="padding:7px 10px;text-align:center;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#888">Total</th>
+          <th style="padding:7px 10px;text-align:center;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#888">% Lost</th>
           <th style="padding:7px 10px;text-align:center;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#888">Provider</th>
           <th style="padding:7px 10px;text-align:center;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#888">Company</th>
           <th style="padding:7px 10px;text-align:center;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#888">National</th>
