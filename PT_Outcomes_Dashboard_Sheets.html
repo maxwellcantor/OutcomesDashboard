@@ -687,23 +687,36 @@ async function loadAllData() {
 
   ALL_DATA = allRows;
 
-  // Fetch national averages from Google Sheet and update inputs
+  // Compute company averages from the loaded data first as a fallback,
+  // then let the sheet override them below. The sheet is the source of truth.
+  recalcCompanyAvgs();
+
+  // Load benchmarks (company + national averages) from the Google Sheet.
+  // Primary tab: "Benchmarks" with columns  Measure | Company | National.
+  // Also works if a "Company" column is added to the existing "National Averages"
+  // tab (national read from "National", else the older "Average" column).
   try {
-    const natRows = await fetchSheetRows('National Averages');
-    natRows.forEach(row => {
+    let benchRows = [];
+    try { benchRows = await fetchSheetRows('Benchmarks'); } catch(e) {}
+    if (!benchRows || !benchRows.length) {
+      try { benchRows = await fetchSheetRows('National Averages'); } catch(e) {}
+    }
+    (benchRows || []).forEach(row => {
       const measure = row['Measure'];
-      const avg = parseFloat(row['Average']);
-      if (measure && !isNaN(avg) && nationalAvgs.hasOwnProperty(measure)) {
-        nationalAvgs[measure] = avg;
-      }
+      if (!measure || !nationalAvgs.hasOwnProperty(measure)) return;
+      const company = parseFloat(row['Company']);
+      const natRaw = (row['National'] !== undefined && row['National'] !== '') ? row['National'] : row['Average'];
+      const national = parseFloat(natRaw);
+      if (!isNaN(company))  GLOBAL_CO_AVGS[measure] = company;   // sheet overrides computed
+      if (!isNaN(national)) nationalAvgs[measure] = national;
     });
-    // Update the input fields to reflect loaded values
+    // Reflect national values in the editable input fields
     document.querySelectorAll('.nat-avg-input').forEach(inp => {
       const m = inp.dataset.measure;
       if (m && nationalAvgs[m] !== undefined) inp.value = nationalAvgs[m];
     });
   } catch(e) {
-    console.warn('Could not load National Averages tab:', e.message);
+    console.warn('Could not load Benchmarks / National Averages tab:', e.message);
   }
 
   // Fetch Staff tab — source of truth for provider->clinic assignments.
@@ -736,9 +749,6 @@ async function loadAllData() {
   } catch(e) {
     console.warn('Could not load Staff tab:', e.message);
   }
-
-  // Recalculate global company averages from all loaded data
-  recalcCompanyAvgs();
 
   document.getElementById('loading-overlay').classList.add('hidden');
 
